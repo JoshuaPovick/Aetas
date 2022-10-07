@@ -1,0 +1,4 @@
+include README.rst
+#include aetas/data/*
+
+prune build

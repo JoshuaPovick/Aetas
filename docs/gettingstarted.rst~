@@ -1,0 +1,46 @@
+***************
+Getting Started
+***************
+
+
+
+How it works
+============
+
+|Prometheus| uses stars to derive an analytical point spread function (PSF) for an image.  It then fits the height and central coordinates of all stars *simultaneously* using the PSF.
+
+
+The CCDData Object
+==================
+
+This is the object type used for images and is based on the astropy CCDData type but has some additional capabilities that are needed for |Prometheus|.
+
+.. code-block:: python
+
+        from prometheus.ccdata import CCDData
+	image = CCDData(flux,error,mask=mask)
+
+You can also read an image directly from a file.
+	
+.. code-block:: python
+
+        from prometheus.ccdata import CCDData
+	image = CCDData.read('ccd1100.fits')
+
+You can also write a CCDData object to file.  This saves the flux, error, mask and sky (computed) to file.
+	
+.. code-block:: python
+
+	image.write('outfile.fits')
+        
+
+The PSF Object
+==============
+
+
+
+read()
+
+write()
+
+
