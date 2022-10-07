@@ -1,0 +1,18 @@
+### Extensions ###
+
+*.fits
+*.fits.gz
+
+*.jpeg
+*.jpg
+
+*.nml1
+*.nml2
+
+*.pdf
+*.png
+*.pyc
+
+*.track
+
+*.zip
