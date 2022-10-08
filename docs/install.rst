@@ -3,21 +3,20 @@ Installation
 ************
 
 
-Installing Prometheus
-=====================
+Installing Aetas
+================
 
-The easiest way to install Prometheus is with PyPi.  Note that you need to install "theprometheus",
-but it will import with "prometheus".
+The easiest way to install |Aetas| is with PyPi.
 
 .. code-block:: bash
 
-    pip install theprometheus
+    pip install aetas
 
 To get the very latest version of the software, install it directly from GitHub.
     
 .. code-block:: bash
 
-    pip install git+https://github.com/dnidever/prometheus    
+    pip install git+https://github.com/JoshuaPovick/aetas
 
 
 Dependencies
@@ -27,7 +26,4 @@ Dependencies
 - scipy
 - astropy
 - matplotlib
-- sep
-- photutils
 - dlnpyutils
-- scikit-image
