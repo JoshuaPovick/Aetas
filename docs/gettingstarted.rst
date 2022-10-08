@@ -7,7 +7,7 @@ Getting Started
 How it works
 ============
 
-|Prometheus| uses stars to derive an analytical point spread function (PSF) for an image.  It then fits the height and central coordinates of all stars *simultaneously* using the PSF.
+|Aetas| uses stars to derive an analytical point spread function (PSF) for an image.  It then fits the height and central coordinates of all stars *simultaneously* using the PSF.
 
 
 The CCDData Object
