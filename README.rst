@@ -2,14 +2,14 @@
 Aetas
 =====
 
-A codE to calculaTe stellAr ageS (aetas).
+A codE to calculaTe stellAr ageS (Aetas).
 
 Code to calculate stellar ages using photometry and spectroscopy with PARSEC isochrones.
 
 Authors
 -------
 
-- **Joshau Povick** (Montana State University)
+- **Joshua Povick** (Montana State University)
 - **David Nidever** (Montana State University)
 
 Installation
