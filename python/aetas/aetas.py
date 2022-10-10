@@ -8,15 +8,15 @@ __authors__ = 'Joshua Povick <joshua.povick@montana.edu?'
 __version__ = '20221007'  # yyyymmdd
 
 
-
-# Astropy
+#Astropy
 import astropy
 from astropy.io import fits
 from astropy.table import Table
 from astropy import units as u
 
-# Dlnpyutils
+# Dlnpyutils and ages
 from dlnpyutils.utils import bspline,mad,interp
+import ages as ages
 
 # dust_extinction
 from dust_extinction.parameter_averages import CCM89,O94,F99,VCG04,GCC09,M14,F19,D22
@@ -33,34 +33,17 @@ from matplotlib import rc
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 
-# Numpy/Scipy
+#Numpy/Scipy
 import numpy as np
-from numpy.polynomial import Polynomial
 import scipy
 from scipy.interpolate import interp1d
 from scipy.optimize import curve_fit
 
-def closest(data,value):
-    '''
-    Find nearest value in array to given value
+# pdb
+import pdb
 
-    Inputs:
-    ------
-        data:  array-like
-               data to search through
-
-        value: float or int
-               value of interest
-
-    Output:
-    ------
-        close: float or int
-               value in data closest to given value
-    '''
-
-    data = np.asarray(data)
-
-    return data[(np.abs(np.subtract(data,value))).argmin()]
+# tqdm 
+from tqdm.notebook import tqdm
 
 class Aetas():
     '''
@@ -84,6 +67,9 @@ class Aetas():
                                'DISTANCE'
                 
                                'DISTANCE' must be in units of parsecs
+                               
+                               Nota Bene: Make sure all dtypes match the corresponding ones in 
+                               isochrones
                     
                    isochrones: Table (pandas dataframe or astropy table)
                                PARSEC isochrone table with the following columns:
@@ -97,6 +83,9 @@ class Aetas():
                                one less element.
                                
                                'label' is the evolutionary phase label given by PARSEC
+                               
+                               Nota Bene: Make sure all dtypes match the corresponding ones in 
+                               star_data
                         
                       ext_law: string, optional
                                extinction law to use. Default is CCM89.
@@ -559,6 +548,7 @@ class Aetas():
             print('Running Aetas.teff_2_appmags()')
             print('Teff:',teff)
             print('Extinctions:',extincts)
+            print('Age: ',age)
         
         # Set up
         lgteff = np.log10(teff)
@@ -626,86 +616,121 @@ class Aetas():
 
         for i in range(len(self.iso_interp_labels)):
 
-            # younger age spline
+            ### younger age spline
+#             try:
             if extrap_lo:
                 self.did_extrap=1
-                
-                try:
-                    spl_lo = interp(iso_lo['logTe'],iso_lo[self.iso_interp_labels[i]],lgteff,
-                                  assume_sorted=False,extrapolate=True)
-
-                    if i <= 5:
-                        calc_lo[i] = spl_lo+self.distmod+extincts[i]
-                        
-                    else:
-                        calc_lo[i] = spl_lo
-
-                except:
-                    calc_lo[i] = 999999.0
+                spl_lo = interp(iso_lo['logTe'],iso_lo[self.iso_interp_labels[i]],lgteff,
+                              assume_sorted=False,extrapolate=True)
 
             else:
                 if self.debug:
                     print('no extrap lo')
                 try:
-                    spl_lo = bspline(iso_lo['logTe'],iso_lo[self.iso_interp_labels[i]])(lgteff)
-                    
-                    if i<= 5:
-                        calc_lo[i] = spl_lo+self.distmod+extincts[i]
-                        
-                    else:
-                        calc_lo[i] = spl_lo
-
+                    spl_lo = bspline(iso_lo['logTe'],iso_lo[self.iso_interp_labels[i]],nord=2)(lgteff)
+                
                 except:
-                    calc_lo[i] = 999999.0
+                    pdb.set_trace()
+
+            if i == 7 and (spl_lo <= 0.0 or np.isfinite(spl_lo)==False):
+                close_teff_idx = np.where(iso_lo['logTe']==self.closest(iso_lo['logTe'],lgteff))
+                spl_lo = iso_lo[self.iso_interp_labels[i]][close_teff_idx]
+
+            if np.isfinite(spl_lo)==False:
+                calc_lo[i] = 999999.0
+                continue
+
+            if i <= 5:
+                calc_lo[i] = spl_lo+self.distmod+extincts[i]
+
+            else:
+                calc_lo[i] = spl_lo
+
+            if i == 7 and calc_lo[i] < 0:
+                print('Calc lo')
+                print('iso teffs:',repr(iso_lo['logTe'].data))
+                print('iso interps',repr(iso_lo[self.iso_interp_labels[i]].data))
+                print('star teff:',lgteff)
+                print('delta_int_IMF:',calc_lo[i])
+
+#             except:
+#                 calc_lo[i] = 999999.0
 
             ### older age spline 
+#             try:
             if extrap_hi:
                 self.did_extrap=1
-                
-                try:
-                    spl_hi = interp(iso_hi['logTe'],iso_hi[self.iso_interp_labels[i]],lgteff,
-                                  assume_sorted=False,extrapolate=True)
-
-                    if i <= 5:
-                        calc_hi[i] = spl_hi+self.distmod+extincts[i]
-                    
-                    else:
-                        calc_hi[i] = spl_hi 
-
-                except:
-                    calc_hi[i] = 999999.0
+                spl_hi = interp(iso_hi['logTe'],iso_hi[self.iso_interp_labels[i]],lgteff,
+                              assume_sorted=False,extrapolate=True)
 
             else:
                 if self.debug:
                     print('no extrap hi')
-                try:
-                    spl_hi = bspline(iso_hi['logTe'],iso_hi[self.iso_interp_labels[i]])(lgteff)
+                spl_hi = bspline(iso_hi['logTe'],iso_hi[self.iso_interp_labels[i]],nord=2)(lgteff)
 
-                    if i<= 5:
-                        calc_hi[i] = spl_hi+self.distmod+extincts[i]
-                        
-                    else:
-                        calc_hi[i] = spl_hi
+            if i == 7 and (spl_hi <= 0.0 or np.isfinite(spl_hi)==False):
+                close_teff_idx = np.where(iso_hi['logTe']==self.closest(iso_hi['logTe'],lgteff))
+                spl_hi = iso_hi[self.iso_interp_labels[i]][close_teff_idx]
 
-                except:
-                    calc_hi[i] = 999999.0
+            if np.isfinite(spl_hi)==False:
+                calc_hi[i] = 999999.0
+                continue
+
+            if i <= 5:
+                calc_hi[i] = spl_hi+self.distmod+extincts[i]
+
+            else:
+                calc_hi[i] = spl_hi
+
+            if i == 7 and calc_hi[i] < 0:
+                print('Calc hi')
+                print('iso teffs:',repr(iso_hi['logTe'].data))
+                print('iso interps',repr(iso_hi[self.iso_interp_labels[i]].data))
+                print('star teff:',lgteff)
+                print('delta_int_IMF:',calc_hi[i])
+
+#             except:
+#                 calc_hi[i] = 999999.0
     
         calc_ = 999999.0*np.ones(8)
         calc_deriv = 999999.0*np.ones(7)
         for i in range(len(self.iso_interp_labels)):
             
-#             print(calc_lo[i])
-#             print(calc_hi[i])
-#             print(Polynomial.fit([age_lo,age_hi],[calc_lo[i],calc_hi[i]],deg=1))
+            # Both good interpolate
             
-            spl_ = np.poly1d(np.squeeze(np.polyfit([age_lo,age_hi],[calc_lo[i],calc_hi[i]],1)))
+            if calc_lo[i] != 999999.0 and calc_hi[i] != 999999.0:
+                spl_ = np.poly1d(np.squeeze(np.polyfit([age_lo,age_hi],[calc_lo[i],calc_hi[i]],1)))
             
-            calc_[i] = spl_(age)
+                calc_[i] = spl_(age)
             
-            if i < 7:
-                calc_deriv[i] = spl_.deriv()(age)
-        
+                if i < 7:
+                    calc_deriv[i] = spl_.deriv()(age)
+                    if np.isfinite(calc_deriv[i])==False:
+                        pdb.set_trace()
+
+                if i == 7 and (calc_[i]<=0. or np.isfinite(calc_[i])==False):
+                    close_age_idx, = np.where([age_lo,age_hi]==self.closest([age_lo,age_hi],age))
+                    calc_[i] = np.array([calc_lo[i],calc_hi[i]])[close_age_idx]
+             
+            # if one good use that value
+            elif calc_lo[i] == 999999.0:
+                calc_[i] = calc_hi[i]
+                calc_deriv[i] = 0
+            
+            elif calc_hi[i] == 999999.0:
+                calc_[i] = calc_lo[i]
+                calc_deriv[i] = 0
+                
+            else:
+                print('give up')
+                
+        if calc_[7] == 999999.0:
+            pdb.set_trace()
+                
         self.mag_logg_spl_deriv = calc_deriv # used in get_age to calculate the age error
+        
+        if calc_[-1]>1000.:
+            pdb.set_trace()
         
         self.delta_int_IMF = calc_[-1] # store int_IMF separately
         calc_ = calc_[:-1] # delete int_IMF from the calculated values
@@ -714,14 +739,88 @@ class Aetas():
     
     def init_guess_age(self):
         '''
-        Calculate an initial edcuated guess for the age used by self.get_age()
+        Calculate an initial edcuated guess for the age of a star by searching photomtery 
+        (BP, G, RP, J, H, K) and spectroscopy (Teff, log(g)) space.
+        
+        Nota Bene: This does require that the extinctions are already calcuated with 
+        Aetas.extinction().
+             
+        Output:
+        ------
+            age: float
+                 initial guess for the age of a star 
         '''
         
-        # do stuff here
+        extincts = self.ext
         
-        return None
+        if extincts[1] > 100.:
+            if self.debug:
+                print('Bad extinctions replaced with 0.0')
+            extincts *= 0.0
+        
+        if self.debug:
+            print('Running Aetas.init_guess_age()')
+            print('Teff:',self.teff)
+            print('Extinctions:',extincts)
+            
+        # Array of observables
+        # Gaia EDR3 and 2MASS photometry, logg, and Teff
+        obs = np.append(np.append(np.copy(self.phot),self.logg),self.teff)
+        obserr = np.append(np.append(np.copy(self.phot_err),self.logg_err),self.teff_err/(np.log(10)*self.teff))
+        
+        # Make sure the uncertainties are realistic
+        obserr[0:6] = np.maximum(obserr[0:6],5e-3)  # cap phot errors at 5e-3
+        obserr[6] = np.maximum(obserr[6],25) # cap teff errors at 25 K
+        obserr[7] = np.maximum(obserr[7],0.05)      # cap logg errors at 0.05
+        #obserr[8] = np.maximum(obserr[8],0.1)       # cap feh errosr at 0.1
+            
+        # Select region around the star in Teff, logg and [Fe/H]
+        ind, = np.where((np.abs(10**self.iso['logTe']-self.teff) < 100) &
+                        (np.abs(self.iso['logg']-self.logg) < 0.2))
+        if len(ind)==0:
+            ind, = np.where((np.abs(10**self.iso['logTe']-self.teff) < 300) &
+                            (np.abs(self.iso['logg']-self.logg) < 0.4))
+        if len(ind)==0:
+            ind, = np.where((np.abs(10**self.iso['logTe']-self.teff) < 500) &
+                            (np.abs(self.iso['logg']-self.logg) < 0.6))           
+        if len(ind)==0:
+            if self.debug:
+                print('No close isochrone points.  Skipping')
+            
+            lgage = np.sum(np.multiply(self.iso['logAge'],self.iso['delta_int_IMF']))/np.sum(self.iso['delta_int_IMF'])            
+            return 10**lgage/10**9
+            
+        # Get array of observables for the isochrone data
+        local_iso = self.iso[ind]
+        iso_colnames = np.copy(self.iso_interp_labels)[:-1]
+        iso_colnames = np.append(iso_colnames,'logTe') #'BPmag','Gmag','RPmag','Jmag','Hmag','Ksmag','logg','logTe'
+        
+        iso_obs = np.zeros((len(ind),len(iso_colnames)),float)
+        for j in range(len(iso_colnames)): iso_obs[:,j] = local_iso[iso_colnames[j]]
+            
+        # Extinction and distance modulus
+        for j in range(6):
+            # Extinction
+            iso_obs[:,j] += extincts[j]
+            # Distance modulus
+            iso_obs[:,j] += self.distmod
+            
+        # Chi-squared
+        chisq = np.sum((iso_obs - obs.reshape(1,-1))**2 / obserr.reshape(1,-1), axis=1)
+        
+        # Find best isochrone point
+        bestind = np.argmin(chisq)
+        resid = obs-iso_obs[bestind,:]
+        
+        age = 10**local_iso['logAge'][bestind]/10**9
+        
+        if self.debug:
+            print('chisq:', chisq)
+            print('resid:', resid)
+        
+        return age
     
-    def get_age(self,label,extrap,guess_ages=np.linspace(0.012,17.)[::10],maxfev=5000):
+    def get_age(self,label,extrap,maxfev=5000):#guess_ages=np.linspace(0.012,17.)[::10]
         '''
         Calculate Age of a star using chisq
         
@@ -777,14 +876,18 @@ class Aetas():
         
         # initialize lists
         
-        curve_ages = []
-        curve_ages_err = []
-        curve_chi = []
-        curve_rms = []
-        curve_delta_int_IMF = []
+        curve_ages = [] #999999.0
+        curve_ages_err = [] #999999.0
+        curve_chi = [] #999999.0
+        curve_rms = [] #999999.0
+        curve_delta_int_IMF = [] #999999.0
         
         #
-        self.guess_ages = guess_ages
+        #self.guess_ages = guess_ages
+        
+#         self.guess_age = [self.init_guess_age()
+        guess_ages = [self.init_guess_age()]
+        self.guess_age = guess_ages[0]
         
         # set photometry error or 0.01 if tiny
         phot_err = np.maximum(self.phot_err,0.01)
@@ -793,71 +896,94 @@ class Aetas():
             print('Running Aetas.get_age()')
             print('guess_ages:',guess_ages)
 
-        # loop over age and ak space 
+
         for i in range(len(guess_ages)):
-            try:
-                # calculate best fit parameters and covariance matrix
-                obs_quants = np.append(np.copy(self.phot),self.logg)
-                obs_quants_err = np.append(phot_err,self.logg_err)
+#             try:
+            # calculate best fit parameters and covariance matrix
+            obs_quants = np.append(np.copy(self.phot),self.logg)
+            obs_quants_err = np.append(phot_err,self.logg_err)
 
-                teff_2_appmags_logg_ = partial(self.teff_2_appmags_logg,label=label,extrap=extrap)
-                popt,pcov = curve_fit(teff_2_appmags_logg_,self.teff,obs_quants,p0=guess_ages[i],
-                                      method='lm',sigma=obs_quants_err,
-                                      absolute_sigma=True,maxfev=maxfev)
-
-                # populate lists
-                curve_ages.append(popt[0])
-                curve_mags_logg = np.asarray(teff_2_appmags_logg_(self.teff,popt[0],label=label,extrap=extrap))
-
-                # Calculate Age error using derivatives of the mag and logg splines from self.teff_2_appmags_logg
-                deriv_sigma = np.dot(self.mag_logg_spl_deriv/np.linalg.norm(self.mag_logg_spl_deriv)**2,
-                                     np.append(phot_err,self.logg_err))
-
-                curve_ages_err.append(np.sqrt(np.sum(np.square(deriv_sigma))))
-
-                if self.debug:
-                    print('Calc App Mags + logg:',curve_mags_logg)
-                    print('Observed Mags + logg:',obs_quants)
-                    print('Observed Mags + logg Errors:',obs_quants_err)
-
-
-                curve_chi.append(sum((curve_mags_logg-obs_quants)**2/obs_quants_err**2))
-                curve_rms.append(np.std(curve_mags_logg-obs_quants))
-                curve_delta_int_IMF.append(self.delta_int_IMF)
-
-            except:
-                # populate lists
+            teff_2_appmags_logg_ = partial(self.teff_2_appmags_logg,label=label,extrap=extrap)
+            popt,pcov = curve_fit(teff_2_appmags_logg_,self.teff,obs_quants,p0=guess_ages[i],
+                                  method='lm',sigma=obs_quants_err,absolute_sigma=True,maxfev=maxfev)
+            
+            if np.isfinite(pcov)==False:
+#                 print(r'PCOV problem')
                 curve_ages.append(999999.0)
                 curve_ages_err.append(999999.0)
                 curve_chi.append(999999.0)
                 curve_rms.append(999999.0)
                 curve_delta_int_IMF.append(999999.0)
                 
+#                 pdb.set_trace()
+
+            # populate lists
+            curve_ages.append(popt[0])
+            curve_mags_logg = np.asarray(teff_2_appmags_logg_(self.teff,popt[0],label=label,extrap=extrap))
+
+            # Calculate Age error using derivatives of the mag and logg splines from self.teff_2_appmags_logg
+
+            norm = np.linalg.norm(self.mag_logg_spl_deriv)                    
+            if norm > 0.0:
+                deriv_sigma = np.dot(self.mag_logg_spl_deriv/norm**2, np.append(phot_err,self.logg_err))
+
+                curve_ages_err.append(np.sqrt(np.sum(np.square(deriv_sigma))))
+
+            else:
+                curve_ages_err.append(100.)
+
             if self.debug:
-                print(i+1,guess_ages[i],curve_ages[i],curve_chi[i],curve_rms[i])
+                print('Calc App Mags + logg:',curve_mags_logg)
+                print('Observed Mags + logg:',obs_quants)
+                print('Observed Mags + logg Errors:',obs_quants_err)
+
+
+            curve_chi.append(sum((curve_mags_logg-obs_quants)**2/obs_quants_err**2))
+            curve_rms.append(np.std(curve_mags_logg-obs_quants))
+            curve_delta_int_IMF.append(self.delta_int_IMF)
+            
+#             if curve_delta_int_IMF > 1000.:
+#                 pdb.set_trace()
+
+#             except:
+#                 # populate lists
+#                 curve_age = 999999.0
+#                 curve_age_err = 999999.0
+#                 curve_chi = 999999.0
+#                 curve_rms = 999999.0
+#                 curve_delta_int_IMF = 999999.0
+
+        #if self.debug:
+        #    print('Guess Age, Age, Age Err, chisq, RMS, delta int_IMF',
+        #          guess_age,curve_age,curve_age_err,curve_chi,curve_rms,curve_delta_int_IMF)
                 
-        if np.sum(np.array(curve_ages)<1e5)==0:
-            if self.debug:
-                print('All Bad')
-            return 999999.0, 999999.0, 999999.0, 999999.0, 999999.0
+#         if curve_ages == 0: #np.sum(np.array([])<1e5)==0:
+#             if self.debug:
+#                 print('All Bad')
+#             return 999999.0, 999999.0, 999999.0, 999999.0, 999999.0
         
-        # find smallest chisq value and corresponding age and Ak
+        # find smallest chisq value and corresponding age
         idx = np.asarray(curve_chi).argmin()
         age = np.asarray(curve_ages)[idx]
         age_err = np.asarray(curve_ages_err)[idx]
         chi = np.asarray(curve_chi)[idx]
         rms = np.asarray(curve_rms)[idx]
         delta_int_IMF = np.asarray(curve_delta_int_IMF)[idx]
+        
         self.age = age
         self.age_err = age_err
         self.chi = chi
         self.rms = rms
         self.delta_int_IMF = delta_int_IMF
         
+#         if np.isfinite(curve_delta_int_IMF)==False:
+#             pdb.set_trace()
+        
         if self.debug:
-            print('Best Fit Age, Age Error, chisq, RMS, delta_int_IMF:',age,age_err,chi,rms,delta_int_IMF)
+            print('Guess Age,Best Fit Age, Age Error, chisq, RMS, delta_int_IMF:',
+                  guess_ages,age,age_err,chi,rms,delta_int_IMF)
 
-        return age, age_err, chi, rms, delta_int_IMF
+        return age,age_err,chi,rms,delta_int_IMF
     
     def age_2_mass(self,age,age_err,label,extrap):
         '''
@@ -888,7 +1014,7 @@ class Aetas():
                       7 = EAGB, the early asymptotic giant branch, or a quick stage of red giant for 
                       massive stars
                       8 = TPAGB, the thermally pulsing asymptotic giant branch
-                      9 = post-AGB (in preparation!)
+                      9 = post-AGB
         
               extrap: bool
                       False: no extrapolation
@@ -1003,7 +1129,8 @@ class Aetas():
                                                               label=self.uniq_phases[i],extrap=False)
             
         # check for good values
-        good, = np.where((np.isin(label_age,np.asarray(self.guess_ages))==False)&(label_age!=999999.0))
+#         good, = np.where((np.isin(label_age,np.asarray(self.guess_age))==False)&(label_age!=999999.0))
+        good, = np.where(label_age!=999999.0)
         
         # if no good values try extrapolating
         if np.size(good)==0:
@@ -1026,7 +1153,8 @@ class Aetas():
                                                                   label=self.uniq_phases[i],extrap=True)
                 
             # check for good values
-            good, = np.where((np.isin(label_age,np.asarray(self.guess_ages))==False)&(label_age!=999999.0))
+#             good, = np.where((np.isin(label_age,np.asarray(self.guess_age))==False)&(label_age!=999999.0))
+            good, = np.where(label_age!=999999.0)
             
             if np.size(good)==0:
                 
@@ -1038,11 +1166,21 @@ class Aetas():
         wgt_sum = np.sum(label_delta_int_IMF[good])
         
         wgt_age = np.dot(label_age[good],label_delta_int_IMF[good])/wgt_sum
+        
         wgt_age_err = np.dot(label_age_err[good],label_delta_int_IMF[good])/wgt_sum
+        
         wgt_chi = np.dot(label_chi[good],label_delta_int_IMF[good])/wgt_sum
+        
         wgt_rms = np.dot(label_rms[good],label_delta_int_IMF[good])/wgt_sum
+        
         wgt_delta_int_IMF = np.dot(label_delta_int_IMF[good],label_delta_int_IMF[good])/wgt_sum
+        
         wgt_mass = np.dot(label_mass[good],label_delta_int_IMF[good])/wgt_sum
+        
         wgt_mass_err = np.dot(label_mass_err[good],label_delta_int_IMF[good])/wgt_sum
+        
+#         print(wgt_sum, wgt_age, wgt_age_err, wgt_chi, wgt_rms, wgt_delta_int_IMF, wgt_mass, wgt_mass_err)
+        
+#         pdb.set_trace()
         
         return wgt_age, wgt_age_err, wgt_chi, wgt_rms, wgt_delta_int_IMF, wgt_mass, wgt_mass_err
