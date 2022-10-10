@@ -10,7 +10,7 @@ setup(name="aetas",
       author_email='joshua.povick@montana.edu',
       url='https://github.com/JoshuaPovick/aetas',
       packages=find_packages(exclude=["tests"]),
-      scripts=['bin/aetas'],
+      #scripts=['bin/aetas'],
       requires=['numpy','astropy(>=4.0)','scipy','dlnpyutils']
 #      include_package_data=True,
 )
